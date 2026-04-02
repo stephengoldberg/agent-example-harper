@@ -23,30 +23,10 @@ const WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search', max_u
 const normalize = (s) =>
   s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
 
-// Cosine similarity between two embedding vectors (1.0 = identical, 0.0 = unrelated)
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return 0
-  let dot = 0, normA = 0, normB = 0
-  for (let i = 0; i < a.length; i++) {
-    dot   += a[i] * b[i]
-    normA += a[i] * a[i]
-    normB += b[i] * b[i]
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB)
-  return denom === 0 ? 0 : dot / denom
-}
-
-// Similarity threshold for semantic cache hits (0–1). Questions above this score
-// are considered "the same question" and served from Harper without calling Claude.
-const CACHE_THRESHOLD = 0.88
-
-// Fetch the embedding for a stored message directly from Harper by primary key.
-// Harper's search() results don't include the raw float array, but a direct
-// record lookup does — giving us persistent embeddings that survive restarts.
-async function getEmbedding(msgId) {
-  const record = await tables.Message.get(msgId)
-  return record?.embedding ?? null
-}
+// Cosine distance threshold for Harper's native HNSW vector search.
+// Harper uses cosine *distance* (0 = identical, 2 = opposite), so this is
+// equivalent to cosine similarity >= 0.88 (distance = 1 - similarity = 0.12).
+const CACHE_DISTANCE_THRESHOLD = 0.12
 
 export class Agent extends Resource {
   static loadAsInstance = false
@@ -87,8 +67,8 @@ export class Agent extends Resource {
       createdAt: new Date().toISOString(),
     })
 
-    // 4. Vector search for relevant messages across all conversations
-    //    (used for semantic context AND semantic cache — keep embedding field for similarity calc)
+    // 4. Vector search for relevant messages across all conversations (semantic context for LLM)
+    //    Harper's HNSW index sorts by cosine distance natively — no in-memory math needed.
     const relevant = []
     const searchResults = tables.Message.search({
       sort: { attribute: 'embedding', target: userEmbedding },
@@ -96,7 +76,7 @@ export class Agent extends Resource {
     })
     for await (const msg of searchResults) {
       if (msg.content && msg.id !== userMsgId) {
-        relevant.push(msg) // msg.embedding is kept for cosine similarity below
+        relevant.push(msg)
       }
     }
 
@@ -128,26 +108,22 @@ export class Agent extends Resource {
       cachedReply = recent.slice(pIdx + 1).find((m) => m.role === 'assistant') ?? null
     }
 
-    // Second: semantic similarity check across all conversations.
-    // If any user message in the vector results scores above the threshold
-    // (meaning it's asking essentially the same thing), serve its answer from cache.
+    // Second: Harper-native HNSW vector search with distance threshold.
+    // Using conditions + comparator 'lt' lets Harper's index filter results
+    // without fetching all records or doing any in-memory cosine math.
     if (!cachedReply) {
-      // Fetch embeddings from Harper by primary key and compute cosine similarity.
-      // These are persistent — works correctly after restarts.
-      const scoredMatches = (
-        await Promise.all(
-          relevant
-            .filter((m) => m.role === 'user')
-            .map(async (m) => {
-              const emb = await getEmbedding(m.id)
-              return { msg: m, sim: cosineSimilarity(userEmbedding, emb) }
-            })
-        )
-      )
-        .filter(({ sim }) => sim >= CACHE_THRESHOLD)
-        .sort((a, b) => b.sim - a.sim)
+      const nearbyMsgs = tables.Message.search({
+        conditions: {
+          attribute: 'embedding',
+          comparator: 'lt',
+          value: CACHE_DISTANCE_THRESHOLD,
+          target: userEmbedding,
+        },
+        limit: 10,
+      })
 
-      for (const { msg: match } of scoredMatches) {
+      for await (const match of nearbyMsgs) {
+        if (match.id === userMsgId || match.role !== 'user') continue
         // Find the assistant reply that followed this question in its conversation
         const matchConvMsgs = []
         const matchHistory = tables.Message.search({
