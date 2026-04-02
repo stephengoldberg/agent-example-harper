@@ -49,12 +49,11 @@ async function getEmbedding(msgId) {
 }
 
 export class Agent extends Resource {
-  allowRead()   { return true }
-  allowCreate() { return true }
   static loadAsInstance = false
 
   // POST /Agent — send a message, get a response
   async post(target, data) {
+    target.checkPermission = false
     const startTime = Date.now()
     const { message, conversationId: existingId } = data || {}
     if (!message) {

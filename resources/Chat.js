@@ -256,6 +256,7 @@ const HTML = /* html */ `<!DOCTYPE html>
 
           <!-- Vector Store (inside Harper) -->
           <rect x="12" y="74" width="110" height="64" rx="5" fill="#2a2d30" stroke="rgba(102,255,204,0.28)" stroke-width="1"/>
+          
           <text x="67" y="92" text-anchor="middle" fill="#f5f5f5" font-size="10" font-weight="500">Vector Store</text>
           <text x="67" y="107" text-anchor="middle" fill="rgba(255,255,255,0.42)" font-size="8.5">HNSW Index</text>
           <text x="67" y="120" text-anchor="middle" fill="rgba(255,255,255,0.42)" font-size="8.5">semantic context</text>
@@ -475,9 +476,9 @@ const HTML = /* html */ `<!DOCTYPE html>
 </html>`
 
 export class Chat extends Resource {
-  allowRead() { return true }
   static loadAsInstance = false
-  get() {
+  get(target) {
+    target.checkPermission = false
     return new Response(HTML, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     })
