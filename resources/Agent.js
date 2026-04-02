@@ -289,3 +289,12 @@ export class Agent extends Resource {
     }
   }
 }
+
+export class Stats extends Resource {
+  static loadAsInstance = false
+
+  async get(target) {
+    target.checkPermission = false
+    return tables.Stats.get('global')
+  }
+}
