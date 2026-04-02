@@ -14,6 +14,10 @@ naturally — don't mention that you're reading stored memories unless the user 
 // Approximate pricing for Claude Sonnet 4.5 (per token)
 const COST_INPUT_PER_TOKEN  = 3  / 1_000_000  // $3  / 1M input tokens
 const COST_OUTPUT_PER_TOKEN = 15 / 1_000_000  // $15 / 1M output tokens
+const COST_PER_WEB_SEARCH   = 10 / 1_000      // $10 / 1K searches
+
+// Anthropic web search tool — executed server-side, no external API key needed
+const WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }
 
 // Normalize text for exact cache comparison
 const normalize = (s) =>
@@ -182,23 +186,45 @@ export class Agent extends Resource {
         context.map((m) => `[${m.role}]: ${m.content}`).join('\n')
     }
 
-    // 8. Call Claude — exclude the current user message from history (it's the last turn)
+    // 8. Call Claude with web search enabled — Anthropic executes searches server-side,
+    //    no external search API or key required.
     const messages = [
       ...recent
         .filter((m) => m.id !== userMsgId)
         .map(({ role, content }) => ({ role, content })),
       { role: 'user', content: message },
     ]
-    const response = await getClient().messages.create({
+
+    let apiResponse = await getClient().messages.create({
       model: config.anthropic.model(),
       max_tokens: 1024,
+      tools: [WEB_SEARCH_TOOL],
       system: systemPrompt,
       messages,
     })
 
+    // Handle pause_turn — server hit the max_uses limit mid-response; continue once
+    if (apiResponse.stop_reason === 'pause_turn') {
+      apiResponse = await getClient().messages.create({
+        model: config.anthropic.model(),
+        max_tokens: 1024,
+        tools: [WEB_SEARCH_TOOL],
+        system: systemPrompt,
+        messages: [...messages, { role: 'assistant', content: apiResponse.content }],
+      })
+    }
+
     const latencyMs = Date.now() - startTime
-    const assistantContent = response.content[0].text
-    const { input_tokens, output_tokens } = response.usage
+
+    // Extract text blocks (response also contains server_tool_use / web_search_tool_result blocks)
+    const assistantContent = apiResponse.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim()
+
+    const { input_tokens, output_tokens } = apiResponse.usage
+    const webSearches = apiResponse.usage?.server_tool_use?.web_search_requests ?? 0
 
     // 9. Store the assistant's response with its embedding
     const assistantMsgId = crypto.randomUUID()
@@ -218,6 +244,7 @@ export class Agent extends Resource {
       updatedAt: new Date().toISOString(),
     })
 
+    const searchCost = webSearches * COST_PER_WEB_SEARCH
     return {
       conversationId,
       message: { role: 'assistant', content: assistantContent },
@@ -229,10 +256,12 @@ export class Agent extends Resource {
           total:  input_tokens + output_tokens,
         },
         cost: {
-          input:  +(input_tokens  * COST_INPUT_PER_TOKEN).toFixed(6),
-          output: +(output_tokens * COST_OUTPUT_PER_TOKEN).toFixed(6),
-          total:  +((input_tokens * COST_INPUT_PER_TOKEN) + (output_tokens * COST_OUTPUT_PER_TOKEN)).toFixed(6),
+          input:   +(input_tokens  * COST_INPUT_PER_TOKEN).toFixed(6),
+          output:  +(output_tokens * COST_OUTPUT_PER_TOKEN).toFixed(6),
+          search:  +searchCost.toFixed(6),
+          total:   +((input_tokens * COST_INPUT_PER_TOKEN) + (output_tokens * COST_OUTPUT_PER_TOKEN) + searchCost).toFixed(6),
         },
+        webSearches,
         vectorContext: { hit: context.length > 0, count: context.length, cached: false },
       },
     }
