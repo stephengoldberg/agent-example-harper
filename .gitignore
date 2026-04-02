@@ -1,0 +1,7 @@
+node_modules/
+models/
+.env
+CONFIG.env
+*.env
+!.env.example
+.DS_Store

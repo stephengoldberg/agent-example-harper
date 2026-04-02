@@ -1,0 +1,15 @@
+type Conversation @table @export {
+  id: ID @primaryKey
+  title: String
+  createdAt: String
+  updatedAt: String
+}
+
+type Message @table @export {
+  id: ID @primaryKey
+  conversationId: String @indexed
+  role: String
+  content: String
+  embedding: [Float] @indexed(type: "HNSW", distance: "cosine")
+  createdAt: String
+}
