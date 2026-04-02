@@ -290,7 +290,7 @@ export class Agent extends Resource {
   }
 }
 
-export class Stats extends Resource {
+export class PublicStats extends Resource {
   static loadAsInstance = false
 
   async get(target) {

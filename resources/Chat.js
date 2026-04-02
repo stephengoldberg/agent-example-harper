@@ -331,7 +331,7 @@ const HTML = /* html */ `<!DOCTYPE html>
 
   async function fetchSavings() {
     try {
-      const res = await fetch('/Stats/global')
+      const res = await fetch('/PublicStats/global')
       if (!res.ok) return
       const data = await res.json()
       if (data && typeof data === 'object') {
