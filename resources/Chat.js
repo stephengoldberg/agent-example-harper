@@ -293,9 +293,9 @@ const HTML = /* html */ `<!DOCTYPE html>
           <line x1="67" y1="228" x2="67" y2="254" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" marker-end="url(#ah)"/>
 
           <!-- Embed & Store box -->
-          <rect x="4" y="256" width="126" height="34" rx="6" fill="#383d40" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
-          <text x="67" y="270" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-size="9">Embed &amp; Store</text>
-          <text x="67" y="283" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-size="9">result in Harper</text>
+          <rect x="4" y="256" width="126" height="34" rx="6" fill="#383d40" stroke="#66ffcc" stroke-width="1.5"/>
+          <text x="67" y="270" text-anchor="middle" fill="#66ffcc" font-size="10" font-weight="600">Embed &amp; Store</text>
+          <text x="67" y="283" text-anchor="middle" fill="#66ffcc" font-size="10" font-weight="600">result in Harper</text>
         </svg>
       </div>
     </div>
@@ -475,6 +475,7 @@ const HTML = /* html */ `<!DOCTYPE html>
 </html>`
 
 export class Chat extends Resource {
+  allowRead() { return true }
   static loadAsInstance = false
   get() {
     return new Response(HTML, {
