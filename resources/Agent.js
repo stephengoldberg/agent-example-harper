@@ -216,11 +216,18 @@ export class Agent extends Resource {
 
     const latencyMs = Date.now() - startTime
 
-    // Extract the final text block only — Claude may emit intermediate text before web search
-    // tool calls (e.g. "Let me search for this…"). Taking the last text block ensures we only
-    // return the actual answer, not any pre-search reasoning that got concatenated.
-    const textBlocks = apiResponse.content.filter((b) => b.type === 'text')
-    const assistantContent = (textBlocks.at(-1)?.text ?? '').trim()
+    // The API can split the answer across multiple text blocks (sentence fragments joined
+    // without separators) and may emit a text block BEFORE the web search tool call.
+    // Strategy: find the last non-text block (tool use / search result) and take only the
+    // text blocks that follow it — these form the actual answer. Join with '' since the
+    // fragments are already continuous prose. Falls back to all text blocks if no tools used.
+    const lastToolIdx = apiResponse.content.reduce((acc, b, i) => b.type !== 'text' ? i : acc, -1)
+    const assistantContent = apiResponse.content
+      .slice(lastToolIdx + 1)
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim()
 
     const { input_tokens, output_tokens } = apiResponse.usage
     const webSearches = apiResponse.usage?.server_tool_use?.web_search_requests ?? 0
