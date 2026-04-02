@@ -346,7 +346,7 @@ const HTML = /* html */ `<!DOCTYPE html>
 
   function renderMarkdown(text) {
     const escape = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const lines = text.split('\n')
+    const lines = text.split('\\n')
     let html = '', inOl = false, inUl = false
     for (const raw of lines) {
       const line = raw
