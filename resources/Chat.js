@@ -215,6 +215,58 @@ const HTML = /* html */ `<!DOCTYPE html>
     #send:hover:not(:disabled) { opacity: 0.88; }
     #send:active:not(:disabled) { transform: scale(0.97); }
     #send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Mobile ─────────────────────────────────────────── */
+    #sidebar-toggle {
+      display: none;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 0.4rem;
+      color: var(--btree-green);
+      font-size: 0.7rem;
+      font-family: 'Ubuntu', sans-serif;
+      font-weight: 500;
+      padding: 0.25rem 0.6rem;
+      cursor: pointer;
+      margin-left: auto;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+    #mobile-savings {
+      display: none;
+      font-size: 0.7rem;
+      color: var(--btree-green);
+      font-weight: 500;
+      margin-left: 0.75rem;
+      white-space: nowrap;
+    }
+    @media (max-width: 700px) {
+      #sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        z-index: 100;
+        width: 85vw;
+        max-width: 340px;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+      }
+      #sidebar.open {
+        transform: translateX(0);
+      }
+      #sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 99;
+      }
+      #sidebar-overlay.open { display: block; }
+      #sidebar-toggle { display: block; }
+      #mobile-savings { display: block; }
+      #conv-badge { display: none; }
+      .message { max-width: 92%; }
+    }
   </style>
 </head>
 <body>
@@ -224,7 +276,10 @@ const HTML = /* html */ `<!DOCTYPE html>
   <div class="header-divider"></div>
   <span class="header-sub">Demo Agent</span>
   <span id="conv-badge"></span>
+  <span id="mobile-savings">$0.0000 saved</span>
+  <button id="sidebar-toggle" onclick="toggleSidebar()">⚡ Info</button>
 </header>
+<div id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <div id="main">
 
@@ -257,9 +312,9 @@ const HTML = /* html */ `<!DOCTYPE html>
           <rect x="4" y="52" width="252" height="298" rx="7" fill="rgba(102,255,204,0.04)" stroke="#66ffcc" stroke-width="1.5"/>
           <text x="130" y="67" text-anchor="middle" fill="#66ffcc" font-size="9" font-weight="700" letter-spacing="0.1em">HARPER</text>
 
-          <!-- Harper Agent box (inside Harper) -->
+          <!--  Agent box (inside Harper) -->
           <rect x="12" y="72" width="232" height="34" rx="5" fill="rgba(102,255,204,0.09)" stroke="#66ffcc" stroke-width="1"/>
-          <text x="128" y="87" text-anchor="middle" fill="#66ffcc" font-size="10" font-weight="600">Harper Agent</text>
+          <text x="128" y="87" text-anchor="middle" fill="#66ffcc" font-size="10" font-weight="600">Agent</text>
           <text x="128" y="99" text-anchor="middle" fill="rgba(102,255,204,0.55)" font-size="8">JS Resource · runs in-process</text>
 
           <!-- Arrow: Agent → Vector/Cache -->
@@ -343,22 +398,6 @@ const HTML = /* html */ `<!DOCTYPE html>
   const badge = document.getElementById('conv-badge')
 
   function scrollBottom() { chat.scrollTop = chat.scrollHeight }
-
-  async function fetchSavings() {
-    try {
-      const res = await fetch('/PublicStats/global')
-      if (!res.ok) return
-      const data = await res.json()
-      if (data && typeof data === 'object') {
-        const saved = data.totalSaved ?? 0
-        const hits  = data.cacheHits  ?? 0
-        document.getElementById('savings-amount').textContent = '$' + saved.toFixed(4)
-        document.getElementById('savings-hits').textContent   = hits + ' cache hit' + (hits !== 1 ? 's' : '')
-      }
-    } catch {}
-  }
-
-  fetchSavings()
 
   function renderMarkdown(text) {
     const escape = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -486,6 +525,27 @@ const HTML = /* html */ `<!DOCTYPE html>
     input.style.height = Math.min(input.scrollHeight, 144) + 'px'
   })
   input.focus()
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open')
+    document.getElementById('sidebar-overlay').classList.toggle('open')
+  }
+
+  async function fetchSavings() {
+    try {
+      const res = await fetch('/PublicStats/global')
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && typeof data === 'object') {
+        const saved = data.totalSaved ?? 0
+        const hits  = data.cacheHits  ?? 0
+        document.getElementById('savings-amount').textContent = '$' + saved.toFixed(4)
+        document.getElementById('savings-hits').textContent   = hits + ' cache hit' + (hits !== 1 ? 's' : '')
+        document.getElementById('mobile-savings').textContent = '$' + saved.toFixed(4) + ' saved'
+      }
+    } catch {}
+  }
+  fetchSavings()
 </script>
 </body>
 </html>`
