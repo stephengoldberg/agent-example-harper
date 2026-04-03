@@ -18,35 +18,27 @@ Live demo: **[agent-example.stephen-demo-org.harperfabric.com/Chat](https://agen
 ## Architecture
 
 ```
-                          ┌─────────────────────────────────────────────┐
-                          │                   Harper                    │
-                          │                                             │
-User Query ──────────────►│  Harper Agent (resources/Agent.js)          │
-                          │       │                                     │
-                          │       ├─ Layer 1: Exact match cache         │
-                          │       │  (normalize + compare in history)   │
-                          │       │                                     │
-                          │       ├─ Layer 2: HNSW vector cache         │
-                          │       │  (cosine distance < 0.12)           │
-                          │       │                  │                  │
-                          │       │            Cache HIT ───────────────┼──► Free instant reply
-                          │       │                                     │
-                          │       ├─ HNSW sort search (top 10)         │
-                          │       │  → semantic context for LLM        │
-                          │       │                                     │
-                          │  Local SLM (bge-small-en-v1.5 via          │
-                          │  harper-fabric-embeddings / llama.cpp)      │
-                          │       │                                     │
-                          └───────┼─────────────────────────────────────┘
-                                  │ Cache MISS
-                                  ▼
-                         Claude Sonnet (Anthropic)
-                         + web_search_20250305
-                                  │
-                          ┌───────▼─────────────────────────────────────┐
-                          │  Embed response → store in Harper           │
-                          │  (vector index for future cache hits)       │
-                          └─────────────────────────────────────────────┘
+User Query
+    │
+    ▼
+┌──────────────────────────────────────────────────────────┐
+│                         Harper                           │
+│                                                          │
+│  1. Embed user message (Local SLM: bge-small-en-v1.5)   │
+│  2. Store user message + embedding                       │
+│  3. HNSW sort search → top 10 semantic context           │
+│  4. Load conversation history                            │
+│  5. Layer 1: Exact text match cache                      │
+│  6. Layer 2: HNSW distance cache (< 0.12)                │
+│       │                          │                       │
+│   Cache HIT                  Cache MISS                  │
+│       │                          │                       │
+│  Return $0.00           Call Claude ──────────────────────┼──► Anthropic API
+│  + saved $X                      │                       │    + Web Search
+│                          Embed response (local SLM)  ◄───┘
+│                          Store in Harper                  │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## How the Semantic Cache Works
