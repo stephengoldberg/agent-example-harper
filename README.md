@@ -26,10 +26,7 @@ User Query
 │                                                          │
 │  1. Embed user message (Local SLM: bge-small-en-v1.5)   │
 │  2. Store user message + embedding                       │
-│  3. HNSW sort search → top 10 semantic context           │
-│  4. Load conversation history                            │
-│  5. Layer 1: Exact text match cache                      │
-│  6. Layer 2: HNSW distance cache (< 0.12)                │
+│  3. HNSW semantic cache check (cosine distance < 0.12)   │
 │       │                          │                       │
 │   Cache HIT                  Cache MISS                  │
 │       │                          │                       │
@@ -41,13 +38,11 @@ User Query
 └──────────────────────────────────────────────────────────┘
 ```
 
+Every request is standalone. Ask once, pay for Claude. Ask again — or rephrase the same question — and Harper serves the cached answer instantly at $0.
+
 ## How the Semantic Cache Works
 
-The cache has two layers, checked in order before every Claude call:
-
-**Layer 1 — Exact match:** Normalize both strings (lowercase, strip punctuation, collapse whitespace) and look for an identical prior user message in the current conversation's loaded history. No extra DB round-trip.
-
-**Layer 2 — HNSW vector similarity:** Use Harper's native vector index with a distance threshold:
+Before calling Claude, the agent searches Harper's HNSW vector index for semantically similar past questions:
 
 ```javascript
 tables.Message.search({
@@ -61,22 +56,9 @@ tables.Message.search({
 })
 ```
 
-Harper's HNSW index evaluates the distance threshold internally — no full table scan, no in-memory cosine math. The result is only messages that are genuinely similar to the query. When a match is found, the agent looks up the assistant reply that followed it in the original conversation and returns that directly.
+Harper's HNSW index evaluates the distance threshold internally — no full table scan, no in-memory cosine math. When a match is found, the agent looks up the assistant reply that followed it and returns that directly. No Claude call, no tokens, no cost.
 
 Cache hits return `cost.total: 0` and include a `cost.saved` field showing what the call would have cost. The saved amount is added to the global `Stats` record (`totalSaved`, `cacheHits`).
-
-## How the Vector Context Works
-
-On every cache miss, the agent runs a second HNSW search to build LLM context:
-
-```javascript
-tables.Message.search({
-  sort: { attribute: 'embedding', target: userEmbedding },
-  limit: 10,
-})
-```
-
-This uses Harper's HNSW sort (nearest-neighbor ranking) rather than a threshold filter — it returns the top 10 most semantically similar messages across all conversations, ordered by closeness. The top 5 are injected into Claude's system prompt as background context, enabling cross-conversation recall without any explicit memory management.
 
 ## Prerequisites
 
