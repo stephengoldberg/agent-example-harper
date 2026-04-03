@@ -1,5 +1,15 @@
 # CLAUDE.md
 
+## Harper Skills
+
+This project uses Harper. Before making changes, install and read the Harper agent skills for best practices on schema design, resources, vector indexing, caching, and deployment:
+
+```bash
+npx skills add harperfast/skills
+```
+
+These skills provide LLM-consumable guidelines at https://github.com/HarperFast/skills — covering schema relationships, REST/WebSocket APIs, custom resources, vector indexing (HNSW), and caching patterns.
+
 ## Project Overview
 
 Harper Demo Agent — a conversational AI agent running entirely on Harper with Claude as the LLM. Harper provides the database, vector index, semantic cache, API server, and deployment runtime in a single process.
