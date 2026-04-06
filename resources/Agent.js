@@ -39,9 +39,12 @@ export class Agent extends Resource {
     }
 
     // 1. Embed first — before any DB writes to avoid holding transactions open
+    const t1 = Date.now()
     const userEmbedding = await embed(message)
+    const tEmbed = Date.now() - t1
 
     // 2. Create or reuse a conversation
+    const t2 = Date.now()
     const conversationId = existingId || crypto.randomUUID()
     if (!existingId) {
       await tables.Conversation.put({
@@ -51,8 +54,10 @@ export class Agent extends Resource {
         updatedAt: new Date().toISOString(),
       })
     }
+    const tConv = Date.now() - t2
 
     // 3. Store the user message with its embedding
+    const t3 = Date.now()
     const userMsgId = crypto.randomUUID()
     await tables.Message.put({
       id: userMsgId,
@@ -62,11 +67,10 @@ export class Agent extends Resource {
       embedding: userEmbedding,
       createdAt: new Date().toISOString(),
     })
+    const tStore = Date.now() - t3
 
     // 4. Semantic cache — Harper-native HNSW vector search with distance threshold.
-    //    If a semantically similar question was asked before (by anyone, in any conversation),
-    //    serve the cached answer instantly at $0 LLM cost. This is the core demo: ask once,
-    //    pay once — every repeat or rephrase is free.
+    const t4 = Date.now()
     let cachedReply = null
     const nearbyMsgs = tables.Message.search({
       conditions: {
@@ -80,7 +84,6 @@ export class Agent extends Resource {
 
     for await (const match of nearbyMsgs) {
       if (match.id === userMsgId || match.role !== 'user') continue
-      // Find the assistant reply that followed this question in its conversation
       const matchConvMsgs = []
       const matchHistory = tables.Message.search({
         conditions: [{ attribute: 'conversationId', value: match.conversationId }],
@@ -95,10 +98,14 @@ export class Agent extends Resource {
         break
       }
     }
+    const tCache = Date.now() - t4
+
+    const timing = { embedMs: tEmbed, convMs: tConv, storeMs: tStore, cacheSearchMs: tCache }
+    console.log('[Agent] timing:', JSON.stringify(timing))
 
     // Return the cached answer — zero LLM cost
     if (cachedReply) {
-      // Look up original response cost and accumulate global savings
+      const t5 = Date.now()
       let savedCost = 0
       try {
         const origMsg = await tables.Message.get(cachedReply.id)
@@ -111,11 +118,14 @@ export class Agent extends Resource {
           updatedAt:  new Date().toISOString(),
         })
       } catch {}
+      const tStats = Date.now() - t5
+      console.log('[Agent] cache hit stats update:', tStats + 'ms')
       return {
         conversationId,
         message: { role: 'assistant', content: cachedReply.content },
         meta: {
           latencyMs: Date.now() - startTime,
+          timing,
           tokens: { input: 0, output: 0, total: 0 },
           cost:   { input: 0, output: 0, total: 0, saved: savedCost },
           vectorContext: { hit: true, count: 1, cached: true },
